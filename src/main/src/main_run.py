@@ -17,20 +17,20 @@ from slidewindow import SlideWindow
 class MainLoop:
     
     def __init__(self):
-        # rospy.init_node("first_test_node")
-        # self.warper = Warper()
-        # self.slidewindow = SlideWindow()
-        # self.bridge = CvBridge()
+        self.warper = Warper()
+        self.slidewindow = SlideWindow()
+        self.bridge = CvBridge()
 
         # slide window return variable initialization
-        # self.slide_img = None 
-        # self.slide_x_location = 0
-        # self.current_lane_window = ""
+        self.initialized = False
+        self.slide_img = None 
+        self.slide_x_location = 0
+        self.current_lane_window = ""
 
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
-        self.webot_ctrl_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # node 역할 정하기
+        # self.webot_ctrl_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # node 역할 정하기
 
-        # rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
+        rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
 
     def timerCallback(self, _event):
         try:
@@ -38,17 +38,61 @@ class MainLoop:
         except:
             pass
     
-    # def laneCallback(self):
-        # detect lane
-        # return 0
-    
-    def mainAlgorithm(self):
-        #defalut driving
-        speed_msg = Float64()
-        speed_msg.data = 1000
-        self.webot_ctrl_pub.publish(speed_msg)
+    def laneCallback(self, _data):
+        #detect lane
+        if self.initialized == False:
+            cv2.namedWindow("Simulator_Image", cv2.WINDOW_NORMAL) 
+            cv2.createTrackbar('low_H', 'Simulator_Image', 50, 255, nothing)
+            cv2.createTrackbar('low_S', 'Simulator_Image', 50, 255, nothing)
+            cv2.createTrackbar('low_V', 'Simulator_Image', 50, 255, nothing)
+            cv2.createTrackbar('high_H', 'Simulator_Image', 255, 255, nothing)
+            cv2.createTrackbar('high_S', 'Simulator_Image', 255, 255, nothing)
+            cv2.createTrackbar('high_V', 'Simulator_Image', 255, 255, nothing)
+            self.initialized = True
         
+        cv2_image = self.bridge.imgmsg_to_cv2(_data)
+        self.obstacle_img = cv2_image
+
+        cv2.imshow("original", cv2_image) 
+
+        low_H = cv2.getTrackbarPos('low_H', 'Simulator_Image')
+        low_S = cv2.getTrackbarPos('low_S', 'Simulator_Image')
+        low_V = cv2.getTrackbarPos('low_V', 'Simulator_Image')
+        high_H = cv2.getTrackbarPos('high_H', 'Simulator_Image')
+        high_S = cv2.getTrackbarPos('high_S', 'Simulator_Image')
+        high_V = cv2.getTrackbarPos('high_V', 'Simulator_Image')
+
+        cv2.cvtColor(cv2_image, cv2.COLOR_BGR2HSV) # BGR to HSV
+
+        lower_lane = np.array([low_H, low_S, low_V]) # 
+        upper_lane = np.array([high_H, high_S, high_V])
+
+        lane_image = cv2.inRange(cv2_image, lower_lane, upper_lane)
+
+        cv2.imshow("Lane Image", lane_image)
+        self.laneDetection(lane_image)
+
+        cv2.waitKey(1)
     
+    def laneDetection(self, lane_image):
+        kernel_size = 5
+        blur_img = cv2.GaussianBlur(lane_image,(kernel_size, kernel_size), 0)
+        warped_img = self.warper.warp(blur_img)
+        cv2.imshow("warped_img", warped_img)
+        self.slide_img, self.slide_x_location, self.current_lane_window = self.slidewindow.slidewindow(warped_img)
+        cv2.imshow("slide_img", self.slide_img)
+        # rospy.loginfo("CURRENT LANE WINDOW: {}".format(self.current_lane_window))
+
+    
+    # def mainAlgorithm(self):
+        # defalut driving
+        # speed_msg = Float64()
+        # speed_msg.data = 1000
+        # self.webot_ctrl_pub.publish(speed_msg)
+        
+def nothing(x):
+    pass
+
 def run():
 
     rospy.init_node("main_class_run")
