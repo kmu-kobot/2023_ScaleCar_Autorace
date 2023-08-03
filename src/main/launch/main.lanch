@@ -1,0 +1,9 @@
+<launch>
+    <node name="main_class_run" type="main.py" pkg="main" output="screen"/>
+    <node name="child_sign" type="child_sign.py" pkg="scalecar" output="screen"/>
+
+    <include file="$(find vesc_driver)/launch/vesc_driver_node.launch"/>
+    <include file="$(find usb_cam)/launch/usb_cam-test.launch"/>
+    <include file="$(find aruco_detect)/launch/aruco_detect.launch" />
+      
+</launch>

@@ -32,7 +32,8 @@ class MainLoop:
         self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
 
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
-
+        rospy.Subscriber("sign_id", Int32, self.child_sign_callback)
+    
     def timerCallback(self, _event):
         try:
             self.mainAlgorithm()
@@ -84,6 +85,9 @@ class MainLoop:
         cv2.imshow("slide_img", self.slide_img)
         # rospy.loginfo("CURRENT LANE WINDOW: {}".format(self.current_lane_window))
 
+    def child_sign_callback(self, _data):
+        #updating...
+        return 0
     
     def mainAlgorithm(self):
         #defalut driving
