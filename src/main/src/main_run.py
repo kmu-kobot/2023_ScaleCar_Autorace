@@ -27,6 +27,11 @@ class MainLoop:
         self.slide_x_location = 0
         self.current_lane_window = ""
 
+        # for child sign
+        self.is_child_detected = False
+        self.slow_t1 = 0.0
+        self.sign_data = 0
+
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
         self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
@@ -86,17 +91,52 @@ class MainLoop:
         # rospy.loginfo("CURRENT LANE WINDOW: {}".format(self.current_lane_window))
 
     def child_sign_callback(self, _data):
-        #updating...
-        return 0
+        try :
+            if _data.data == 3:
+                self.child_cnt += 1
+                if self.child_cnt >=20 :
+                    self.sign_data = _data.data
+                    self.is_child_detected = True
+                    self.child_cnt = 0
+            else :
+                self.sign_data = 0
+        except :
+            pass
     
     def mainAlgorithm(self):
-        #defalut driving
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
-        speed_msg.data = 500 # defalut speed
-        angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
-        self.webot_speed_pub.publish(speed_msg) # publish speed
-        self.webot_angle_pub.publish(angle_msg) # publish angle
+
+        # child protect driving
+        if self.is_child_detected == True:
+            # child sign detected, waiting sign to disappear.
+            if self.sign_data == 3:
+                angle_msg.data = 280 - self.slide_x_location # calculate angle error with sliding window data
+                speed_msg.data = 1000 # defalut speed
+
+            # sign disappered, drive slow
+            elif self.sign_data == 0 :      
+                if self.slow_flag == 0:
+                    self.slow_t1 = rospy.get_time() # start time
+                    self.is_child_detected = True
+                t2 = rospy.get_time() # time counter
+
+                # drive slow during 15seconds
+                while t2-self.slow_t1 <= 15 :
+                    angle_msg = 280 - self.slide_x_location # calculate angle error with sliding window data
+                    speed_msg = 500 #slow speed
+                    self.webot_speed_pub.publish(speed_msg) # publish speed
+                    self.webot_angle_pub.publish(angle_msg) # publish angle
+                    t2 = rospy.get_time()
+                self.slow_down_flag = 0
+                self.slow_flag = 0
+
+        #defalut driving
+        else:
+            speed_msg.data = 1000 # defalut speed
+            angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
+            self.webot_speed_pub.publish(speed_msg) # publish speed
+            self.webot_angle_pub.publish(angle_msg) # publish angle
         
 def nothing(x):
     pass
