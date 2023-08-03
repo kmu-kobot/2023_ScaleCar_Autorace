@@ -28,7 +28,8 @@ class MainLoop:
         self.current_lane_window = ""
 
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
-        # self.webot_ctrl_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # node 역할 정하기
+        self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
+        self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
 
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
 
@@ -84,11 +85,14 @@ class MainLoop:
         # rospy.loginfo("CURRENT LANE WINDOW: {}".format(self.current_lane_window))
 
     
-    # def mainAlgorithm(self):
-        # defalut driving
-        # speed_msg = Float64()
-        # speed_msg.data = 1000
-        # self.webot_ctrl_pub.publish(speed_msg)
+    def mainAlgorithm(self):
+        #defalut driving
+        speed_msg = Float64() # speed msg create
+        angle_msg = Float64() # angle msg create
+        speed_msg.data = 500 # defalut speed
+        angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
+        self.webot_speed_pub.publish(speed_msg) # publish speed
+        self.webot_angle_pub.publish(angle_msg) # publish angle
         
 def nothing(x):
     pass
