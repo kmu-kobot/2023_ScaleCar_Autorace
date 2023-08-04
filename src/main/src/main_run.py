@@ -5,7 +5,8 @@ import rospy
 from time import sleep, time
 
 from std_msgs.msg import Int32, String, Float32, Float64
-from sensor_msgs.msg import Image 
+from sensor_msgs.msg import Image
+from obstacle_detector.msg import Obstacles
 
 from cv_bridge import CvBridge
 import cv2
@@ -38,7 +39,9 @@ class MainLoop:
 
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
         rospy.Subscriber("sign_id", Int32, self.child_sign_callback)
-    
+        rospy.Subscriber("rubber_cone", Float32, self.rubbercone_callback)
+
+
     def timerCallback(self, _event):
         try:
             self.mainAlgorithm()
@@ -103,6 +106,11 @@ class MainLoop:
         except :
             pass
     
+
+    def rubbercone_callback(self, _data):
+        pass
+
+
     def mainAlgorithm(self):
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
