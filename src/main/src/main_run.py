@@ -5,7 +5,8 @@ import rospy
 from time import sleep, time
 
 from std_msgs.msg import Int32, String, Float32, Float64
-from sensor_msgs.msg import Image 
+from sensor_msgs.msg import Image
+from obstacle_detector.msg import Obstacles
 
 from cv_bridge import CvBridge
 import cv2
@@ -32,13 +33,19 @@ class MainLoop:
         self.slow_t1 = 0.0
         self.sign_data = 0
 
+        # for rubbercon misson
+        self.is_rubbercon_mission = False
+        self.rubbercon_angle_error = 0
+
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
         self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
 
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
         rospy.Subscriber("sign_id", Int32, self.child_sign_callback)
-    
+        rospy.Subscriber("rubber_cone", Float32, self.rubbercone_callback)
+
+
     def timerCallback(self, _event):
         try:
             self.mainAlgorithm()
@@ -103,6 +110,15 @@ class MainLoop:
         except :
             pass
     
+
+    def rubbercone_callback(self, _data):
+        self.rubbercon_angle_error = _data.data
+        if self.rubbercon_angle_error < 10.0 :
+            self.is_rubbercon_mission = True
+        else :
+            self.is_rubbercon_mission = False
+
+
     def mainAlgorithm(self):
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
@@ -130,14 +146,31 @@ class MainLoop:
                     t2 = rospy.get_time()
                 self.slow_down_flag = 0
                 self.slow_flag = 0
+        
+        # rubbercon mission
+        elif self.is_rubbercon_mission == True:
+            self.rubbercon_drive()
+            self.current_lane = "RIGHT"
 
-        #defalut driving
+        # defalut driving
         else:
             speed_msg.data = 1000 # defalut speed
             angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
+
+    def rubbercon_drive(self) :
+        rospy.loginfo("rubbercon_drive!!!!!!!!!!!!!!!!!")
+        speed_msg = Float64() # speed msg create
+        angle_msg = Float64() # angle msg create
         
+        speed_msg.data = 500 # rubbercon speed
+        angle_msg.data = self.rubbercon_angle_error * -1.0
+
+        self.webot_speed_pub.publish(speed_msg) # publish speed
+        self.webot_angle_pub.publish(angle_msg) # publish angle
+        
+
 def nothing(x):
     pass
 
