@@ -124,17 +124,16 @@ class MainLoop:
 
 
     def child_sign_callback(self, _data):
-        try :
-            if _data.data == 3:
-                self.child_cnt += 1
-                if self.child_cnt >=20 :
-                    self.sign_data = _data.data
-                    self.is_child_detected = True
-                    self.child_cnt = 0
-            else :
-                self.sign_data = 0
-        except :
-            pass
+        # aruco 알고리즘으로 child sign이 검출되었다면 is_child_detected = True
+        if _data.data == 3:
+            self.child_cnt += 1
+            if self.child_cnt >=20 :
+                self.sign_data = _data.data
+                self.is_child_detected = True
+                self.child_cnt = 0
+        else :
+            self.sign_data = 0
+
 
     def warning_callback(self, _data):
         if self.is_rubbercon_mission == True :
@@ -196,7 +195,7 @@ class MainLoop:
                     self.webot_speed_pub.publish(speed_msg) # publish speed
                     self.webot_angle_pub.publish(angle_msg) # publish angle
                     t2 = rospy.get_time()
-                self.slow_down_flag = 0
+                self.is_child_detected = False
                 self.slow_flag = 0
         
         # 2. rubbercon mission
