@@ -3,7 +3,6 @@
     <node name="child_sign" type="child_sign.py" pkg="main" output="screen"/>
     <node name="rubber_cone" type="rubber_cone.py" pkg="main" output="screen"/>
     <node name="detect_obstacles" type="detect_obstacles.py" pkg="main" output="screen"/>
-    <node name="scanConvertor" type="scanConvertor.py" pkg="main" output="screen"/>
     
     <include file="$(find vesc_driver)/launch/vesc_driver_node.launch"/>
     <include file="$(find usb_cam)/launch/webot_usb_cam-test.launch"/>
