@@ -3,6 +3,7 @@
 
 import rospy
 from time import sleep, time
+import statistics
 
 from std_msgs.msg import Int32, String, Float32, Float64
 from sensor_msgs.msg import Image
@@ -22,6 +23,10 @@ class MainLoop:
         self.slidewindow = SlideWindow()
         self.bridge = CvBridge()
 
+        self.current_lane = "RIGHT"
+        self.is_safe = True
+        self.initialized = False
+
         # slide window return variable initialization
         self.initialized = False
         self.slide_img = None 
@@ -37,6 +42,21 @@ class MainLoop:
         self.is_rubbercon_mission = False
         self.rubbercon_angle_error = 0
 
+        # for static obstacle
+        self.is_static_mission = False
+        self.turn_left_flag = False
+        self.turn_right_flag = False
+
+        # for dynamic obstacle
+        self.is_dynamic_mission = False
+
+        self.obstacle_img = []
+
+        self.y_list = []
+        self.y_list_sort = []
+        self.dynamic_obs_cnt = 0
+        self.static_cnt = 0
+
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
         self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
@@ -44,6 +64,9 @@ class MainLoop:
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
         rospy.Subscriber("sign_id", Int32, self.child_sign_callback)
         rospy.Subscriber("rubber_cone", Float32, self.rubbercone_callback)
+
+        rospy.Subscriber("lidar_warning", String, self.warning_callback) # lidar 에서 받아온 object 탐지 subscribe (warning / safe)
+        rospy.Subscriber("object_condition", Float32, self.object_callback) 
 
 
     def timerCallback(self, _event):
@@ -109,7 +132,32 @@ class MainLoop:
                 self.sign_data = 0
         except :
             pass
-    
+
+    def warning_callback(self, _data):
+        if self.is_rubbercon_mission == True :
+            self.is_rubbercon_mission = True
+        elif _data.data == "safe":
+            self.is_safe = True
+            self.y_list = []
+            if self.is_dynamic_mission == 1 :
+                self.dynamic_obs_cnt += 1
+                if self.dynamic_obs_cnt >= 50 : # 50
+                    self.is_dynamic_mission = 0
+                    self.dynamic_obs_cnt = 0
+            self.is_static_mission = 0
+        elif _data.data == "WARNING":
+            self.is_safe = False
+            rospy.loginfo("WARNING!")
+        else:
+            pass
+
+    def object_callback(self, _data):
+        if self.is_dynamic_mission != False or len(self.y_list) <= 19:
+            self.y_list.append(_data.data)
+            if len(self.y_list) >= 21 :
+                del self.y_list[0]
+        else:
+            rospy.logwarn("Unknown warning state!")
 
     def rubbercone_callback(self, _data):
         self.rubbercon_angle_error = _data.data
@@ -151,6 +199,76 @@ class MainLoop:
         elif self.is_rubbercon_mission == True:
             self.rubbercon_drive()
             self.current_lane = "RIGHT"
+        
+        # obstacle mission
+        elif self.is_safe == False:
+            self.y_list_sort = sorted(self.y_list, key = lambda x:x)
+            if len(self.y_list) <= 19 :
+                self.stop()
+            elif abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])) >= 0.17 or self.y_list_sort[10] < -0.15:
+                self.is_dynamic_mission = True
+                self.is_static_mission = False
+                # self.y_list.clear
+                rospy.loginfo("dynamic")
+                # rospy.loginfo(self.y_list_sort)
+                rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
+            else:
+                self.static_cnt += 1
+                if self.static_cnt >= 10 :
+                    self.is_static_mission = True
+                    self.is_dynamic_mission = False
+                    self.static_cnt = 0
+                rospy.loginfo("static")
+                # rospy.loginfo(self.y_list_sort)
+                rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
+
+            #dynamic
+            if self.is_dynamic_mission == True and self.is_safe == False :
+                rospy.logwarn("DYNAMIC OBSTACLE")
+                self.stop()
+
+
+
+            # static obstacle
+            elif self.is_static_mission == 1:
+                rospy.loginfo("STATIC OBSTACLE")
+                # if the car is driving depending on "right" window
+                if self.current_lane == "RIGHT":
+                    if self.turn_left_flag == 0:
+                        self.turn_left_t1 = rospy.get_time()
+                        self.turn_left_flag = 1
+                    t2 = rospy.get_time()
+                    
+                    # go to left line
+                    while t2-self.turn_left_t1 <= 1.0:
+                        self.change_line_left()
+                        t2 = rospy.get_time()
+                    # array car to fit line
+                    while t2- self.turn_left_t1 <= 1.25 :
+                        self.change_line_right()
+                        t2 = rospy.get_time()
+                    self.current_lane = "LEFT"
+                    self.is_static_mission = 0
+                    self.turn_left_flag = 0
+
+                # if the car is driving depending on "left" window
+                elif self.current_lane == "LEFT":
+                    if self.turn_right_flag == 0:
+                        self.turn_right_t1 = rospy.get_time()
+                        self.turn_right_flag = 1
+                    t2 = rospy.get_time()
+                    
+                    # go to right line 
+                    while t2-self.turn_right_t1 <= 1.0:
+                        self.change_line_right()
+                        t2 = rospy.get_time()
+                    # array car to fit line
+                    while t2-self.turn_right_t1 <= 1.25 :
+                        self.change_line_left()
+                        t2 = rospy.get_time()
+                    self.current_lane = "RIGHT"
+                    self.is_static_mission = 0
+                    self.turn_right_flag = 0
 
         # defalut driving
         else:
@@ -169,6 +287,30 @@ class MainLoop:
 
         self.webot_speed_pub.publish(speed_msg) # publish speed
         self.webot_angle_pub.publish(angle_msg) # publish angle
+    
+    def change_line_left(self) :
+        speed_msg = Float64() # speed msg create
+        angle_msg = Float64() # angle msg create
+        speed_msg.data = 300.0
+        angle_msg.data = 0.3
+        self.webot_speed_pub.publish(speed_msg)
+        self.webot_angle_pub.publish(angle_msg)
+
+    def change_line_right(self) :
+        speed_msg = Float64() # speed msg create
+        angle_msg = Float64() # angle msg create
+        speed_msg.data = 300.0
+        angle_msg.data = -0.3
+        self.webot_speed_pub.publish(speed_msg)
+        self.webot_angle_pub.publish(angle_msg)
+
+    def stop(self):
+        speed_msg = Float64() # speed msg create
+        angle_msg = Float64() # angle msg create
+        speed_msg.data = 0.0
+        angle_msg.data = 0.0
+        self.webot_speed_pub.publish(speed_msg)
+        self.webot_angle_pub.publish(angle_msg)
         
 
 def nothing(x):
