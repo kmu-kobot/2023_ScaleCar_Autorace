@@ -39,9 +39,9 @@ class MainLoop:
         self.sign_data = 0             # child sign id
         self.slow_flag = 0             # sign이 처음 감지되면 1로 변경
 
-        # for rubbercon misson
-        self.is_rubbercon_mission = False
-        self.rubbercon_angle_error = 0
+        # for rubbercone misson
+        self.is_rubbercone_mission = False # rubber cone 미션 구간 진입 여부
+        self.rubbercone_angle_error = 0    # 양옆 rubber cone 좌표 오차
 
         # for static obstacle
         self.is_static_mission = False
@@ -136,8 +136,8 @@ class MainLoop:
 
 
     def warning_callback(self, _data):
-        if self.is_rubbercon_mission == True :
-            self.is_rubbercon_mission = True
+        if self.is_rubbercone_mission == True :
+            self.is_rubbercone_mission = True
         elif _data.data == "safe":
             self.is_safe = True
             self.y_list = []
@@ -162,11 +162,13 @@ class MainLoop:
             rospy.logwarn("Unknown warning state!")
 
     def rubbercone_callback(self, _data):
-        self.rubbercon_angle_error = _data.data
-        if self.rubbercon_angle_error < 10.0 :
-            self.is_rubbercon_mission = True
+        self.rubbercone_angle_error = _data.data
+        # rubber cone이 감지된 경우
+        if self.rubbercone_angle_error < 10.0 :
+            self.is_rubbercone_mission = True
+        # 감지된 rubber cone이 없는 경우(subscribe 1000.0)
         else :
-            self.is_rubbercon_mission = False
+            self.is_rubbercone_mission = False
 
 
     def mainAlgorithm(self):
@@ -200,7 +202,7 @@ class MainLoop:
         
         # 2. rubbercon mission
         elif self.is_rubbercon_mission == True:
-            self.rubbercon_drive()
+            self.rubbercone_drive()
             self.current_lane = "RIGHT"
         
         # 3. obstacle mission
@@ -280,17 +282,19 @@ class MainLoop:
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
 
-    def rubbercon_drive(self) :
-        rospy.loginfo("rubbercon_drive!!!!!!!!!!!!!!!!!")
+
+    def rubbercone_drive(self) :
+        rospy.loginfo("rubbercone_drive!!!!!!!!!!!!!!!!!")
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         
-        speed_msg.data = 500 # rubbercon speed
-        angle_msg.data = self.rubbercon_angle_error * -1.0
+        speed_msg.data = 500 # rubbercone speed
+        angle_msg.data = self.rubbercone_angle_error * -1.0
 
         self.webot_speed_pub.publish(speed_msg) # publish speed
         self.webot_angle_pub.publish(angle_msg) # publish angle
-    
+
+
     def change_line_left(self) :
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
