@@ -43,18 +43,18 @@ class MainLoop:
         self.rubbercon_angle_error = 0
 
         # for static obstacle
-        self.is_static_mission = False
+        self.is_static_mission = False # 정적 장애물 인식 여부
         self.turn_left_flag = False
         self.turn_right_flag = False
 
         # for dynamic obstacle
-        self.is_dynamic_mission = False
+        self.is_dynamic_mission = False # 동적 장애물 인식 여부
 
         self.obstacle_img = []
 
-        self.y_list = []
-        self.y_list_sort = []
-        self.dynamic_obs_cnt = 0
+        self.y_list = []          # 감지된 장애물 좌표 리스트
+        self.y_list_sort = []     # 감지된 장애물 왼쪽부터 나열한 리스트
+        self.dynamic_obs_cnt = 0  # 동적 장애물 개수
         self.static_cnt = 0
 
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
@@ -133,31 +133,39 @@ class MainLoop:
         except :
             pass
 
+
     def warning_callback(self, _data):
-        if self.is_rubbercon_mission == True :
+        # lidar에서 장애물을 인식한 후 상태 변수를 갱신함
+        # rubber cone이 감지되었을 때
+        if self.is_rubbercon_mission == True:
             self.is_rubbercon_mission = True
+        # lidar_warning 상태가 safe일 때
         elif _data.data == "safe":
             self.is_safe = True
             self.y_list = []
-            if self.is_dynamic_mission == 1 :
+            if self.is_dynamic_mission == True:
                 self.dynamic_obs_cnt += 1
-                if self.dynamic_obs_cnt >= 50 : # 50
-                    self.is_dynamic_mission = 0
+                if self.dynamic_obs_cnt >= 50 : # 50회 이상 감지되면
+                    self.is_dynamic_mission = False
                     self.dynamic_obs_cnt = 0
-            self.is_static_mission = 0
+            self.is_static_mission = False
         elif _data.data == "WARNING":
+        # lidar_warning 상태가 WARNING일 때(rubber cone이 아닌 장애물)
             self.is_safe = False
             rospy.loginfo("WARNING!")
         else:
             pass
 
+
     def object_callback(self, _data):
+        # 
         if self.is_dynamic_mission != False or len(self.y_list) <= 19:
             self.y_list.append(_data.data)
             if len(self.y_list) >= 21 :
                 del self.y_list[0]
         else:
             rospy.logwarn("Unknown warning state!")
+
 
     def rubbercone_callback(self, _data):
         self.rubbercon_angle_error = _data.data
@@ -202,9 +210,12 @@ class MainLoop:
         
         # obstacle mission
         elif self.is_safe == False:
-            self.y_list_sort = sorted(self.y_list, key = lambda x:x)
+            # 3-1. 판단
+            self.y_list_sort = sorted(self.y_list, key = lambda x:x) # 인식한 장애물 왼쪽부터 나열
+            # 장애물 개수가 19개 이하이면 정지함
             if len(self.y_list) <= 19 :
                 self.stop()
+            # 가장 왼쪽, 가장 오른쪽 장애물 사이의 거리가 0.17 m 이상이거나 장애물이 왼쪽으로 치우쳐 있으면 동적 장애물 미션으로 간주함
             elif abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])) >= 0.17 or self.y_list_sort[10] < -0.15:
                 self.is_dynamic_mission = True
                 self.is_static_mission = False
@@ -212,6 +223,7 @@ class MainLoop:
                 rospy.loginfo("dynamic")
                 # rospy.loginfo(self.y_list_sort)
                 rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
+            # 정적 장애물로 간주함
             else:
                 self.static_cnt += 1
                 if self.static_cnt >= 10 :
@@ -222,23 +234,20 @@ class MainLoop:
                 # rospy.loginfo(self.y_list_sort)
                 rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
 
-            #dynamic
+            # 3-2. 제어
+            # 동적 장애물이 감지되면 정지함
             if self.is_dynamic_mission == True and self.is_safe == False :
                 rospy.logwarn("DYNAMIC OBSTACLE")
                 self.stop()
-
-
-
-            # static obstacle
-            elif self.is_static_mission == 1:
+            # 정적 장애물이 감지되었을 때 동작
+            elif self.is_static_mission == True:
                 rospy.loginfo("STATIC OBSTACLE")
-                # if the car is driving depending on "right" window
+                # 우측에서 주행중인 경우 왼쪽으로 피한 후 오른쪽으로 돌아옴
                 if self.current_lane == "RIGHT":
-                    if self.turn_left_flag == 0:
+                    if self.turn_left_flag == False:
                         self.turn_left_t1 = rospy.get_time()
-                        self.turn_left_flag = 1
+                        self.turn_left_flag = True
                     t2 = rospy.get_time()
-                    
                     # go to left line
                     while t2-self.turn_left_t1 <= 1.0:
                         self.change_line_left()
@@ -248,14 +257,14 @@ class MainLoop:
                         self.change_line_right()
                         t2 = rospy.get_time()
                     self.current_lane = "LEFT"
-                    self.is_static_mission = 0
-                    self.turn_left_flag = 0
+                    self.is_static_mission = False
+                    self.turn_left_flag = False
 
-                # if the car is driving depending on "left" window
+                # 좌측에서 주행중인 경우 오른쪽으로 피한 후 왼쪽으로 돌아옴
                 elif self.current_lane == "LEFT":
-                    if self.turn_right_flag == 0:
+                    if self.turn_right_flag == False:
                         self.turn_right_t1 = rospy.get_time()
-                        self.turn_right_flag = 1
+                        self.turn_right_flag = True
                     t2 = rospy.get_time()
                     
                     # go to right line 
@@ -267,8 +276,8 @@ class MainLoop:
                         self.change_line_left()
                         t2 = rospy.get_time()
                     self.current_lane = "RIGHT"
-                    self.is_static_mission = 0
-                    self.turn_right_flag = 0
+                    self.is_static_mission = False
+                    self.turn_right_flag = False
 
         # defalut driving
         else:
