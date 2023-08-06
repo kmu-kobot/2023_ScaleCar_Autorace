@@ -34,13 +34,14 @@ class MainLoop:
         self.current_lane_window = ""
 
         # for child sign
-        self.is_child_detected = False
-        self.slow_t1 = 0.0
-        self.sign_data = 0
+        self.is_child_detected = False # child sign 검출 여부
+        self.slow_t1 = 0.0             # 어린이보호구역 주행 시간
+        self.sign_data = 0             # child sign id
+        self.slow_flag = 0             # sign이 처음 감지되면 1로 변경
 
-        # for rubbercon misson
-        self.is_rubbercon_mission = False
-        self.rubbercon_angle_error = 0
+        # for rubbercone misson
+        self.is_rubbercone_mission = False # rubber cone 미션 구간 진입 여부
+        self.rubbercone_angle_error = 0    # 양옆 rubber cone 좌표 오차
 
         # for static obstacle
         self.is_static_mission = False # 정적 장애물 인식 여부
@@ -57,14 +58,15 @@ class MainLoop:
         self.dynamic_obs_cnt = 0  # 동적 장애물 개수
         self.static_cnt = 0
 
+        # publisher : mainAlgorithm에서 계산한 속력과 조향각을 전달함
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
         self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
 
+        # subscriber : child_sign id, rubber_cone 조향각, 물체 감지 상태를 받아 속력과 조향각을 구함
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
         rospy.Subscriber("sign_id", Int32, self.child_sign_callback)
         rospy.Subscriber("rubber_cone", Float32, self.rubbercone_callback)
-
         rospy.Subscriber("lidar_warning", String, self.warning_callback) # lidar 에서 받아온 object 탐지 subscribe (warning / safe)
         rospy.Subscriber("object_condition", Float32, self.object_callback) 
 
@@ -76,7 +78,7 @@ class MainLoop:
             pass
     
     def laneCallback(self, _data):
-        #detect lane
+        # detect lane
         if self.initialized == False:
             cv2.namedWindow("Simulator_Image", cv2.WINDOW_NORMAL) 
             cv2.createTrackbar('low_H', 'Simulator_Image', 50, 255, nothing)
@@ -120,25 +122,25 @@ class MainLoop:
         cv2.imshow("slide_img", self.slide_img)
         # rospy.loginfo("CURRENT LANE WINDOW: {}".format(self.current_lane_window))
 
+
     def child_sign_callback(self, _data):
-        try :
-            if _data.data == 3:
-                self.child_cnt += 1
-                if self.child_cnt >=20 :
-                    self.sign_data = _data.data
-                    self.is_child_detected = True
-                    self.child_cnt = 0
-            else :
-                self.sign_data = 0
-        except :
-            pass
+        # aruco 알고리즘으로 child sign이 검출되었다면 is_child_detected = True
+        if _data.data == 3:
+            self.child_cnt += 1
+            if self.child_cnt >=20 :
+                self.sign_data = _data.data
+                self.is_child_detected = True
+                self.child_cnt = 0
+        else :
+            self.sign_data = 0
+
 
 
     def warning_callback(self, _data):
         # lidar에서 장애물을 인식한 후 상태 변수를 갱신함
         # rubber cone이 감지되었을 때
-        if self.is_rubbercon_mission == True:
-            self.is_rubbercon_mission = True
+        if self.is_rubbercone_mission == True:
+            self.is_rubbercone_mission = True
         # lidar_warning 상태가 safe일 때
         elif _data.data == "safe":
             self.is_safe = True
@@ -149,8 +151,8 @@ class MainLoop:
                     self.is_dynamic_mission = False
                     self.dynamic_obs_cnt = 0
             self.is_static_mission = False
-        elif _data.data == "WARNING":
         # lidar_warning 상태가 WARNING일 때(rubber cone이 아닌 장애물)
+        elif _data.data == "WARNING":
             self.is_safe = False
             rospy.loginfo("WARNING!")
         else:
@@ -168,22 +170,24 @@ class MainLoop:
 
 
     def rubbercone_callback(self, _data):
-        self.rubbercon_angle_error = _data.data
-        if self.rubbercon_angle_error < 10.0 :
-            self.is_rubbercon_mission = True
+        self.rubbercone_angle_error = _data.data
+        # rubber cone이 감지된 경우
+        if self.rubbercone_angle_error < 10.0 :
+            self.is_rubbercone_mission = True
+        # 감지된 rubber cone이 없는 경우(subscribe 1000.0)
         else :
-            self.is_rubbercon_mission = False
+            self.is_rubbercone_mission = False
 
 
     def mainAlgorithm(self):
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
 
-        # child protect driving
+        # 1. child protect driving
         if self.is_child_detected == True:
             # child sign detected, waiting sign to disappear.
             if self.sign_data == 3:
-                angle_msg.data = 280 - self.slide_x_location # calculate angle error with sliding window data
+                angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
                 speed_msg.data = 1000 # defalut speed
 
             # sign disappered, drive slow
@@ -191,24 +195,25 @@ class MainLoop:
                 if self.slow_flag == 0:
                     self.slow_t1 = rospy.get_time() # start time
                     self.is_child_detected = True
+                    self.slow_flag = 1
                 t2 = rospy.get_time() # time counter
 
                 # drive slow during 15seconds
                 while t2-self.slow_t1 <= 15 :
-                    angle_msg = 280 - self.slide_x_location # calculate angle error with sliding window data
-                    speed_msg = 500 #slow speed
+                    angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
+                    speed_msg.data = 500 #slow speed
                     self.webot_speed_pub.publish(speed_msg) # publish speed
                     self.webot_angle_pub.publish(angle_msg) # publish angle
                     t2 = rospy.get_time()
-                self.slow_down_flag = 0
+                self.is_child_detected = False
                 self.slow_flag = 0
         
-        # rubbercon mission
+        # 2. rubbercon mission
         elif self.is_rubbercon_mission == True:
-            self.rubbercon_drive()
+            self.rubbercone_drive()
             self.current_lane = "RIGHT"
         
-        # obstacle mission
+        # 3. obstacle mission
         elif self.is_safe == False:
             # 3-1. 판단
             self.y_list_sort = sorted(self.y_list, key = lambda x:x) # 인식한 장애물 왼쪽부터 나열
@@ -279,24 +284,26 @@ class MainLoop:
                     self.is_static_mission = False
                     self.turn_right_flag = False
 
-        # defalut driving
+        # 4. defalut driving
         else:
             speed_msg.data = 1000 # defalut speed
             angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
 
-    def rubbercon_drive(self) :
-        rospy.loginfo("rubbercon_drive!!!!!!!!!!!!!!!!!")
+
+    def rubbercone_drive(self) :
+        rospy.loginfo("rubbercone_drive!!!!!!!!!!!!!!!!!")
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         
-        speed_msg.data = 500 # rubbercon speed
-        angle_msg.data = self.rubbercon_angle_error * -1.0
+        speed_msg.data = 500 # rubbercone speed
+        angle_msg.data = self.rubbercone_angle_error * -1.0
 
         self.webot_speed_pub.publish(speed_msg) # publish speed
         self.webot_angle_pub.publish(angle_msg) # publish angle
-    
+
+
     def change_line_left(self) :
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
