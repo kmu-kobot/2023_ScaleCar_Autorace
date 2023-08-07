@@ -187,6 +187,14 @@ class MainLoop:
         if self.is_child_detected == True:
             # child sign detected, waiting sign to disappear.
             if self.sign_data == 3:
+                if self.slow_flag == 0:
+                    self.slow_t1 = rospy.get_time()
+                t2 = rospy.get_time()
+                while t2 - self.slow_t1 <= 5:
+                    angle_msg.data = 0.5
+                    speed_msg.data = 0
+                    self.webot_speed_pub.publish(speed_msg) # publish speed
+                    self.webot_angle_pub.publish(angle_msg) # publish angle
                 angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
                 speed_msg.data = 1000 # defalut speed
 
