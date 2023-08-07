@@ -298,7 +298,7 @@ class MainLoop:
         angle_msg = Float64() # angle msg create
         
         speed_msg.data = 500 # rubbercone speed
-        angle_msg.data = self.rubbercone_angle_error * -1.0
+        angle_msg.data = self.rubbercone_angle_error * -1.0 + 0.5
 
         self.webot_speed_pub.publish(speed_msg) # publish speed
         self.webot_angle_pub.publish(angle_msg) # publish angle
@@ -308,7 +308,7 @@ class MainLoop:
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         speed_msg.data = 300.0
-        angle_msg.data = 0.3
+        angle_msg.data = 0.8
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
 
@@ -316,7 +316,7 @@ class MainLoop:
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         speed_msg.data = 300.0
-        angle_msg.data = -0.3
+        angle_msg.data = 0.2
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
 
@@ -324,7 +324,7 @@ class MainLoop:
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         speed_msg.data = 0.0
-        angle_msg.data = 0.0
+        angle_msg.data = 0.5
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
         
