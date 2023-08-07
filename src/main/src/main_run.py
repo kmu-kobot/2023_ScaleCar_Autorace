@@ -190,7 +190,7 @@ class MainLoop:
             rospy.loginfo("Child Sign")
             # child sign detected, waiting sign to disappear.
             if self.sign_data == 3:
-                angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
+                angle_msg.data = (self.slide_x_location - 280) * 0.003 + 0.5 # 조향각 계산
                 speed_msg.data = 1000 # defalut speed
                 self.webot_speed_pub.publish(speed_msg) # publish speed
                 self.webot_angle_pub.publish(angle_msg) # publish angle
@@ -205,7 +205,7 @@ class MainLoop:
 
                 # drive slow during 15seconds
                 while t2-self.slow_t1 <= 15 :
-                    angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
+                    angle_msg.data = (self.slide_x_location - 280) * 0.003 + 0.5 # 조향각 계산
                     speed_msg.data = 500 #slow speed
                     self.webot_speed_pub.publish(speed_msg) # publish speed
                     self.webot_angle_pub.publish(angle_msg) # publish angle
@@ -295,7 +295,7 @@ class MainLoop:
             os.system("clear")
             rospy.loginfo("default drive")
             speed_msg.data = 1000 # defalut speed
-            angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
+            angle_msg.data = (self.slide_x_location - 280) * 0.003 + 0.5 # 조향각 계산
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
 
