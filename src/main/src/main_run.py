@@ -2,6 +2,7 @@
 #-*- coding: utf-8 -*-
 
 import rospy
+import os
 from time import sleep, time
 import statistics
 
@@ -61,7 +62,7 @@ class MainLoop:
         # publisher : mainAlgorithm에서 계산한 속력과 조향각을 전달함
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
-        self.webot_angle_pub = rospy.Publisher("/commands/servor/position", Float64, queue_size=1) # servo angle
+        self.webot_angle_pub = rospy.Publisher("/commands/servo/position", Float64, queue_size=1) # servo angle
 
         # subscriber : child_sign id, rubber_cone 조향각, 물체 감지 상태를 받아 속력과 조향각을 구함
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
@@ -185,10 +186,14 @@ class MainLoop:
 
         # 1. child protect driving
         if self.is_child_detected == True:
+            os.system("clear")
+            rospy.loginfo("Child Sign")
             # child sign detected, waiting sign to disappear.
             if self.sign_data == 3:
                 angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
                 speed_msg.data = 1000 # defalut speed
+                self.webot_speed_pub.publish(speed_msg) # publish speed
+                self.webot_angle_pub.publish(angle_msg) # publish angle
 
             # sign disappered, drive slow
             elif self.sign_data == 0 :      
@@ -210,11 +215,12 @@ class MainLoop:
         
         # 2. rubbercon mission
         elif self.is_rubbercon_mission == True:
-            self.rubbercone_drive()
+            self.rubbercone_drive()     # publish 포함되어있음
             self.current_lane = "RIGHT"
         
         # 3. obstacle mission
         elif self.is_safe == False:
+            os.system("clear")
             # 3-1. 판단
             self.y_list_sort = sorted(self.y_list, key = lambda x:x) # 인식한 장애물 왼쪽부터 나열
             # 장애물 개수가 19개 이하이면 정지함
@@ -286,6 +292,8 @@ class MainLoop:
 
         # 4. defalut driving
         else:
+            os.system("clear")
+            rospy.loginfo("default drive")
             speed_msg.data = 1000 # defalut speed
             angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
             self.webot_speed_pub.publish(speed_msg) # publish speed
@@ -293,7 +301,8 @@ class MainLoop:
 
 
     def rubbercone_drive(self) :
-        rospy.loginfo("rubbercone_drive!!!!!!!!!!!!!!!!!")
+        os.system("clear")
+        rospy.loginfo("rubbercone_drive")
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         
@@ -321,10 +330,12 @@ class MainLoop:
         self.webot_angle_pub.publish(angle_msg)
 
     def stop(self):
+        os.system("clear")
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         speed_msg.data = 0.0
         angle_msg.data = 0.5
+        rospy.loginfo("STOP")
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
         

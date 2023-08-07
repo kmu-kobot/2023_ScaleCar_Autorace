@@ -22,7 +22,7 @@ class SlideWindow:
 
     def slidewindow(self, img):
 
-        x_location = None
+        x_location = 280
         # init out_img, height, width        
         out_img = np.dstack((img, img, img)) * 255 # deleted
         # out_img = img # added 
