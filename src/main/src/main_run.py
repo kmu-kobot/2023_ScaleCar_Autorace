@@ -287,7 +287,7 @@ class MainLoop:
         # 4. defalut driving
         else:
             speed_msg.data = 1000 # defalut speed
-            angle_msg.data = self.slide_x_location - 0.165 # calculate angle error with slingwindow data (!!tuning required!!)
+            angle_msg.data = (280 - self.slide_x_location) * 0.003 + 0.5 # 조향각 계산
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
 
