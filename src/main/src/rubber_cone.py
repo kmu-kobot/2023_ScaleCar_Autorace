@@ -2,6 +2,7 @@
 #-*- coding: utf-8 -*-
 
 import rospy
+import os
 
 from std_msgs.msg import Int32, String, Float32
 from sensor_msgs.msg import Image 
@@ -18,19 +19,31 @@ class ClusterLidar :
 
 
     def rubber_callback(self, _data):
-        # 감지된 장애물을 왼쪽, 오른쪽으로 나누어 리스트에 저장함
+        # 좌표계 측정 코드
+        # closeObs = []
+        # for i in _data.circles:
+        #     if (-1 < i.center.x < 1) and (-1 < i.center.y < 1):
+        #         closeObs.append(i)
+        # os.system("clear")
+        # rospy.loginfo(closeObs)
+
+        # 메인
         left_rabacon = []
         right_rabacon = []
         for i in _data.circles :
-            if -1.7 < i.center.x < 0  :
+            if -1 < i.center.x < -0.3  :
                 if 0 < i.center.y < 1 :    # 차량의 왼쪽 앞 장애물
-                    left_rabacon.append(i)
-                elif -1 < i.center.y < 0 : # 차량의 오른쪽 앞 장애물
                     right_rabacon.append(i)
-
+                elif -1 < i.center.y < 0 : # 차량의 오른쪽 앞 장애물
+                    left_rabacon.append(i)
+        # os.system("clear")
+        # rospy.loginfo(f'left_rabacon: {left_rabacon}')
+        # rospy.loginfo(f'right raabcon: {right_rabacon}')
         if len(left_rabacon) >= 1 and len(right_rabacon) >= 1:
-            left_close_rabacon = sorted(left_rabacon, key = lambda x : -x.center.x)[0]
-            right_close_rabacon = sorted(right_rabacon, key = lambda x : -x.center.x)[0]
+            left_close_rabacon = sorted(left_rabacon, key = lambda t : -t.center.x)[0]
+            right_close_rabacon = sorted(right_rabacon, key = lambda t : -t.center.x)[0]
+            # rospy.loginfo(f"left_close_rabacon.center.y: {left_close_rabacon.center.x}")
+            # rospy.loginfo(f"right_close_rabacon.center.y: {right_close_rabacon.center.x}")
             raba = (left_close_rabacon.center.y + right_close_rabacon.center.y)
             self.rabacon_pub.publish(raba)
         else :
