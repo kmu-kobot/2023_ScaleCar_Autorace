@@ -27,15 +27,15 @@ class LidarReceiver():
         # ROI: 장애물 감지 영역 설정
         left_y = -0.2  # 차량 왼쪽 0.2 m
         right_y = 0.2  # 차량 오른쪽 0.2 m
-        front_x = -1.6 # 차량 앞 1.6 m
+        front_x = -0.3 # 차량 앞 1.6 m
         back_x = 0     # 차량 뒤 0 m
         WARNING_CNT = 1
 
         self.point_cnt = 0   # ROI 내 장애물 개수
         self.dynamic_cnt = 0 # 
 
-        # 동적 장애물 왼쪽 기둥 인식
         for i in _data.circles :
+            # ROI 내의 장애물 위치
             if left_y < i.center.y < right_y and front_x < i.center.x < back_x:
                 self.object_pub.publish(i.center.y)
                 

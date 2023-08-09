@@ -31,11 +31,12 @@ class ClusterLidar :
         left_rabacon = []
         right_rabacon = []
         for i in _data.circles :
-            if -1 < i.center.x < -0.3  :
-                if 0 < i.center.y < 1 :    # 차량의 왼쪽 앞 장애물
+            if -0.5 < i.center.x < 0  :
+                if 0 < i.center.y < 1.5 :    # 차량의 왼쪽 앞 장애물
                     right_rabacon.append(i)
-                elif -1 < i.center.y < 0 : # 차량의 오른쪽 앞 장애물
+                elif -1.5 < i.center.y < 0 : # 차량의 오른쪽 앞 장애물
                     left_rabacon.append(i)
+                    
         # os.system("clear")
         # rospy.loginfo(f'left_rabacon: {left_rabacon}')
         # rospy.loginfo(f'right raabcon: {right_rabacon}')

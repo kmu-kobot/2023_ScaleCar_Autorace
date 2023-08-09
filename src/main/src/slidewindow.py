@@ -94,7 +94,7 @@ class SlideWindow:
         else:
             self.current_line = "MID"
             line_flag = 3
-
+        line_flag = 1
         # 양쪽 차선 감지가 비슷한 경우 (가운데 차선)
         if line_flag != 3:
             # 유효한 인덱스에 점 표시

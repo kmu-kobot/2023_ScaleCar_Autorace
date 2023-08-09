@@ -24,7 +24,7 @@ class MainLoop:
         self.slidewindow = SlideWindow()
         self.bridge = CvBridge()
 
-        self.current_lane = "RIGHT"
+        self.current_lane = "LEFT"
         self.is_safe = True
         self.initialized = False
 
@@ -78,6 +78,7 @@ class MainLoop:
     def timerCallback(self, _event):
         try:
             self.mainAlgorithm()
+            # pass
         except:
             pass
     
@@ -85,12 +86,12 @@ class MainLoop:
         # detect lane
         if self.initialized == False:
             cv2.namedWindow("Simulator_Image", cv2.WINDOW_NORMAL) 
-            cv2.createTrackbar('low_H', 'Simulator_Image', 160, 255, nothing)
-            cv2.createTrackbar('low_S', 'Simulator_Image', 160, 255, nothing)
-            cv2.createTrackbar('low_V', 'Simulator_Image', 170, 255, nothing)
-            cv2.createTrackbar('high_H', 'Simulator_Image', 255, 255, nothing)
+            cv2.createTrackbar('low_H', 'Simulator_Image', 23, 360, nothing)
+            cv2.createTrackbar('low_L', 'Simulator_Image', 23, 255, nothing)
+            cv2.createTrackbar('low_S', 'Simulator_Image', 10, 255, nothing)
+            cv2.createTrackbar('high_H', 'Simulator_Image', 300, 360, nothing)
+            cv2.createTrackbar('high_L', 'Simulator_Image', 255, 255, nothing)
             cv2.createTrackbar('high_S', 'Simulator_Image', 255, 255, nothing)
-            cv2.createTrackbar('high_V', 'Simulator_Image', 255, 255, nothing)
             self.initialized = True
         
         cv2_image = self.bridge.imgmsg_to_cv2(_data)
@@ -99,16 +100,16 @@ class MainLoop:
         cv2.imshow("original", cv2_image) 
 
         low_H = cv2.getTrackbarPos('low_H', 'Simulator_Image')
+        low_L = cv2.getTrackbarPos('low_L', 'Simulator_Image')
         low_S = cv2.getTrackbarPos('low_S', 'Simulator_Image')
-        low_V = cv2.getTrackbarPos('low_V', 'Simulator_Image')
         high_H = cv2.getTrackbarPos('high_H', 'Simulator_Image')
+        high_L = cv2.getTrackbarPos('high_L', 'Simulator_Image')
         high_S = cv2.getTrackbarPos('high_S', 'Simulator_Image')
-        high_V = cv2.getTrackbarPos('high_V', 'Simulator_Image')
 
-        cv2.cvtColor(cv2_image, cv2.COLOR_BGR2HSV) # BGR to HSV
+        cv2.cvtColor(cv2_image, cv2.COLOR_BGR2HLS) # BGR to HSV
 
-        lower_lane = np.array([low_H, low_S, low_V]) # 
-        upper_lane = np.array([high_H, high_S, high_V])
+        lower_lane = np.array([low_H, low_L, low_S])
+        upper_lane = np.array([high_H, high_L, high_S])
 
         lane_image = cv2.inRange(cv2_image, lower_lane, upper_lane)
 
@@ -140,7 +141,6 @@ class MainLoop:
             self.sign_data = 0
 
 
-
     def warning_callback(self, _data):
         # lidar에서 장애물을 인식한 후 상태 변수를 갱신함
         # rubber cone이 감지되었을 때
@@ -166,7 +166,7 @@ class MainLoop:
 
     def object_callback(self, _data):
         # 
-        if self.is_dynamic_mission != False or len(self.y_list) <= 19:
+        if self.is_dynamic_mission == False or len(self.y_list) <= 19:
             self.y_list.append(_data.data)
             if len(self.y_list) >= 21 :
                 del self.y_list[0]
@@ -194,7 +194,7 @@ class MainLoop:
             rospy.loginfo("Child Sign")
             # child sign detected, waiting sign to disappear.
             if self.sign_data == 1:
-                angle_msg.data = (self.slide_x_location - 280) * 0.003 + 0.5 # 조향각 계산
+                angle_msg.data = (self.slide_x_location - 280) * 0.0035 + 0.5 # 조향각 계산
                 speed_msg.data = 2000 # defalut speed
                 self.webot_speed_pub.publish(speed_msg) # publish speed
                 self.webot_angle_pub.publish(angle_msg) # publish angle
@@ -230,103 +230,103 @@ class MainLoop:
                 self.is_child_detected = False
                 self.slow_flag = 0
 
-        # 2. rubbercon mission
+        # 2. rubbercone mission
         elif self.is_rubbercone_mission == True:
             self.rubbercone_drive()     # publish 포함되어있음
-            self.current_lane = "RIGHT"
+            self.current_lane = "LEFT"
         
-        # # 3. obstacle mission
-        # elif self.is_safe == False:
-        #     os.system("clear")
-        #     # 3-1. 판단
-        #     self.y_list_sort = sorted(self.y_list, key = lambda x:x) # 인식한 장애물 왼쪽부터 나열
-        #     # 장애물 개수가 19개 이하이면 정지함
-        #     if len(self.y_list) <= 19 :
-        #         self.stop()
-        #     # 가장 왼쪽, 가장 오른쪽 장애물 사이의 거리가 0.17 m 이상이거나 장애물이 왼쪽으로 치우쳐 있으면 동적 장애물 미션으로 간주함
-        #     elif abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])) >= 0.17 or self.y_list_sort[10] < -0.15:
-        #         self.is_dynamic_mission = True
-        #         self.is_static_mission = False
-        #         # self.y_list.clear
-        #         rospy.loginfo("dynamic")
-        #         # rospy.loginfo(self.y_list_sort)
-        #         rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
-        #     # 정적 장애물로 간주함
-        #     else:
-        #         self.static_cnt += 1
-        #         if self.static_cnt >= 10 :
-        #             self.is_static_mission = True
-        #             self.is_dynamic_mission = False
-        #             self.static_cnt = 0
-        #         rospy.loginfo("static")
-        #         # rospy.loginfo(self.y_list_sort)
-        #         rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
+        # 3. obstacle mission
+        elif self.is_safe == False:
+            os.system("clear")
+            # 3-1. 판단
+            self.y_list_sort = sorted(self.y_list, key = lambda x:x) # 인식한 장애물 왼쪽부터 나열
+            # 장애물 개수가 19개 이하이면 정지함
+            if len(self.y_list) > 19 :
+                self.stop()
+            # 가장 왼쪽, 가장 오른쪽 장애물 사이의 거리가 0.17 m 이상이거나 장애물이 왼쪽으로 치우쳐 있으면 동적 장애물 미션으로 간주함
+            elif abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])) >= 0.17 or self.y_list_sort[10] < -0.15:
+                self.is_dynamic_mission = True
+                self.is_static_mission = False
+                # self.y_list.clear
+                rospy.loginfo("dynamic")
+                # rospy.loginfo(self.y_list_sort)
+                rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
+            # 정적 장애물로 간주함
+            else:
+                self.static_cnt += 1
+                if self.static_cnt >= 10 :
+                    self.is_static_mission = True
+                    self.is_dynamic_mission = False
+                    self.static_cnt = 0
+                rospy.loginfo("static")
+                # rospy.loginfo(self.y_list_sort)
+                rospy.loginfo(abs(statistics.mean(self.y_list_sort[0:1]) - statistics.mean(self.y_list_sort[-2:-1])))
 
-        #     # 3-2. 제어
-        #     # 동적 장애물이 감지되면 정지함
-        #     if self.is_dynamic_mission == True and self.is_safe == False :
-        #         rospy.logwarn("DYNAMIC OBSTACLE")
-        #         self.stop()
-        #     # 정적 장애물이 감지되었을 때 동작
-        #     elif self.is_static_mission == True:
-        #         rospy.loginfo("STATIC OBSTACLE")
-        #         # 우측에서 주행중인 경우 왼쪽으로 피한 후 오른쪽으로 돌아옴
-        #         if self.current_lane == "RIGHT":
-        #             if self.turn_left_flag == False:
-        #                 self.turn_left_t1 = rospy.get_time()
-        #                 self.turn_left_flag = True
-        #             t2 = rospy.get_time()
-        #             # go to left line
-        #             while t2-self.turn_left_t1 <= 1.0:
-        #                 self.change_line_left()
-        #                 t2 = rospy.get_time()
-        #             # array car to fit line
-        #             while t2- self.turn_left_t1 <= 1.25 :
-        #                 self.change_line_right()
-        #                 t2 = rospy.get_time()
-        #             self.current_lane = "LEFT"
-        #             self.is_static_mission = False
-        #             self.turn_left_flag = False
+            # 3-2. 제어
+            # 동적 장애물이 감지되면 정지함
+            if self.is_dynamic_mission == True and self.is_safe == False :
+                rospy.logwarn("DYNAMIC OBSTACLE")
+                self.stop()
+            # 정적 장애물이 감지되었을 때 동작
+            elif self.is_static_mission == True:
+                rospy.loginfo("STATIC OBSTACLE")
+                # 우측에서 주행중인 경우 왼쪽으로 피한 후 오른쪽으로 돌아옴
+                if self.current_lane == "RIGHT":
+                    if self.turn_left_flag == False:
+                        self.turn_left_t1 = rospy.get_time()
+                        self.turn_left_flag = True
+                    t2 = rospy.get_time()
+                    # go to left line
+                    while t2-self.turn_left_t1 <= 1.0:
+                        self.change_line_left()
+                        t2 = rospy.get_time()
+                    # array car to fit line
+                    while t2- self.turn_left_t1 <= 1.25 :
+                        self.change_line_right()
+                        t2 = rospy.get_time()
+                    self.current_lane = "LEFT"
+                    self.is_static_mission = False
+                    self.turn_left_flag = False
 
-        #         # 좌측에서 주행중인 경우 오른쪽으로 피한 후 왼쪽으로 돌아옴
-        #         elif self.current_lane == "LEFT":
-        #             if self.turn_right_flag == False:
-        #                 self.turn_right_t1 = rospy.get_time()
-        #                 self.turn_right_flag = True
-        #             t2 = rospy.get_time()
+                # 좌측에서 주행중인 경우 오른쪽으로 피한 후 왼쪽으로 돌아옴
+                elif self.current_lane == "LEFT":
+                    if self.turn_right_flag == False:
+                        self.turn_right_t1 = rospy.get_time()
+                        self.turn_right_flag = True
+                    t2 = rospy.get_time()
                     
-        #             # go to right line 
-        #             while t2-self.turn_right_t1 <= 1.0:
-        #                 self.change_line_right()
-        #                 t2 = rospy.get_time()
-        #             # array car to fit line
-        #             while t2-self.turn_right_t1 <= 1.25 :
-        #                 self.change_line_left()
-        #                 t2 = rospy.get_time()
-        #             self.current_lane = "RIGHT"
-        #             self.is_static_mission = False
-        #             self.turn_right_flag = False
+                    # go to right line 
+                    while t2-self.turn_right_t1 <= 1.0:
+                        self.change_line_right()
+                        t2 = rospy.get_time()
+                    # array car to fit line
+                    while t2-self.turn_right_t1 <= 1.25 :
+                        self.change_line_left()
+                        t2 = rospy.get_time()
+                    self.current_lane = "RIGHT"
+                    self.is_static_mission = False
+                    self.turn_right_flag = False
 
         # 4. defalut driving
         else:
-            os.system("clear")
+            #os.system("clear")
             rospy.loginfo("default drive")
-            # rospy.loginfo(f"slide: {self.slide_x_location}")
-            speed_msg.data = 1000 # defalut speed
+            speed_msg.data = 2000 # defalut speed
             angle_msg.data = (self.slide_x_location - 280) * 0.003 + 0.5 # 조향각 계산
             self.webot_speed_pub.publish(speed_msg) # publish speed
             self.webot_angle_pub.publish(angle_msg) # publish angle
+            # rospy.loginfo(f"slide: {self.slide_x_location}")
 
 
     def rubbercone_drive(self) :
-        os.system("clear")
+        #os.system("clear")
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
         
-        speed_msg.data = 1000 # rubbercone speed
+        speed_msg.data = 1500 # rubbercone speed
         # angle_msg.data = self.rubbercone_angle_error + 0.5
         rospy.loginfo(f"rubber error: {self.rubbercone_angle_error}")
-        angle_msg.data = self.rubbercone_angle_error  + 0.5        
+        angle_msg.data = (self.rubbercone_angle_error  + 0.5  ) * 1.2      
         rospy.loginfo(f"rubbercone_drive: {angle_msg.data}")
 
         self.webot_speed_pub.publish(speed_msg) # publish speed
@@ -336,7 +336,7 @@ class MainLoop:
     def change_line_left(self) :
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
-        speed_msg.data = 300.0
+        speed_msg.data = 1000.0
         angle_msg.data = 0.8
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
@@ -344,7 +344,7 @@ class MainLoop:
     def change_line_right(self) :
         speed_msg = Float64() # speed msg create
         angle_msg = Float64() # angle msg create
-        speed_msg.data = 300.0
+        speed_msg.data = 1000.0
         angle_msg.data = 0.2
         self.webot_speed_pub.publish(speed_msg)
         self.webot_angle_pub.publish(angle_msg)
