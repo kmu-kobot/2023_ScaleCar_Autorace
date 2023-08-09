@@ -5,7 +5,7 @@
   <arg name="image" default="image"/>
   <arg name="transport" default="compressed"/>
   <arg name="fiducial_len" default="0.14"/>
-  <arg name="dictionary" default="7"/>
+  <arg name="dictionary" default="3"/>
   <arg name="do_pose_estimation" default="true"/>
   <!-- If vis_msgs set to true, pose estimation will be published with ROS standard vision_msgs -->
   <arg name="vis_msgs" default="false"/>
