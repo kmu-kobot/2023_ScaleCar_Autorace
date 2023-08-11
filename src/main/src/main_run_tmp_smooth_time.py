@@ -34,7 +34,7 @@ class MainLoop:
         self.speed_msg = Float64() # speed msg create
         self.angle_msg = Float64() # angle msg create
         self.angle_ema = Float64()
-        self.angle_ema.data =0.5
+        self.angle_ema.data = 0.5
 
         self.initDriveFlag = True
 
@@ -59,24 +59,15 @@ class MainLoop:
         self.is_rubbercone_mission = False # rubber cone 미션 구간 진입 여부
         self.rubbercone_angle_error = 0    # 양옆 rubber cone 좌표 오차
 
-        # for all obstacles
-        self.obstacle_flag = False
-        self.obstacle_t1 = 0.0
-        self.is_doing_obstacle_mission = False
-
         # for static obstacle
-        self.is_static_mission = False # 정적 장애물 인식 여부
-        self.turn_left_flag = False
-        self.turn_right_flag = False
-        self.turn_right_t1 = 0.0
-        self.turn_left_t1 = 0.0
-        self.staticThreshold = 0
+        self.is_doing_static_mission = False
+        self.static_t1 = 0.0           # 정적 미션 시작 시간
+        self.static_flag = False       # 정적 미션 시간을 구하기 위한 lock
 
         # for dynamic obstacle
-        self.is_dynamic_mission = False # 동적 장애물 인식 여부
-        self.dynamicThreshold = 0
-        self.dynamic_init = False
-        self.dynamic_t1 = 0.0
+        self.is_doing_dynamic_mission = False
+        self.dynamic_t1 = 0.0           # 동적 미션 시작 시간
+        self.dynamic_flag = False       # 동적 미션 시간을 구하기 위한 lock
 
         self.originalImg = None
 
@@ -178,7 +169,9 @@ class MainLoop:
             self.is_rubbercone_mission = True
         # lidar_warning 상태가 safe일 때 상태 변수 갱신
         elif _data.data == "safe":
-            if self.is_doing_obstacle_mission:
+            if self.is_doing_static_mission:
+                self.is_safe = False
+            elif self.is_doing_dynamic_mission:
                 self.is_safe = False
             else:
                 self.is_safe = True
@@ -194,12 +187,8 @@ class MainLoop:
         # rubber cone이 감지된 경우
         if self.rubbercone_angle_error < 10.0 :
             self.is_rubbercone_mission = True
-            self.is_dynamic_mission = False
-            self.is_static_mission = False
             self.static_cnt = 0
             self.dynamic_obs_cnt = 0
-            self.turn_left_flag = False
-            self.turn_right_flag = False
         # 감지된 rubber cone이 없는 경우(subscribe 1000.0)
         else :
             self.is_rubbercone_mission = False
@@ -262,36 +251,52 @@ class MainLoop:
     def obstacleDrive(self):
         t2 = rospy.get_time()
         # 장애물 미션 시작 시간
-        if self.obstacle_flag == False:
-            self.obstacle_t1 = rospy.get_time()
-            self.is_doing_obstacle_mission = True
-            self.obstacle_flag = True
+        if self.static_flag == False:
+            self.static_t1 = rospy.get_time()
+            self.is_doing_static_mission = True
+            self.static_flag = True
         
         if self.current_lane == "LEFT":
             self.speed_msg.data = 1000
-            if t2 - self.obstacle_t1 < 2.3:
+            if t2 - self.static_t1 < 2.3:
                 self.angle_msg.data = 0.87
-            elif t2 - self.obstacle_t1 < 4:
+            elif t2 - self.static_t1 < 4:
                 self.angle_msg.data = 0.27
             else:
-                self.is_doing_obstacle_mission = False
+                self.is_doing_static_mission = False
                 self.angle_msg.data = 0.57
                 self.current_lane = "RIGHT"
                 self.is_safe = True
         elif self.current_lane == "RIGHT":
             self.speed_msg.data = 1000
-            if t2 - self.obstacle_t1 < 2.3:
+            if t2 - self.static_t1 < 2.3:
                 self.angle_msg.data = 0.27
-            elif t2 - self.obstacle_t1 < 4:
+            elif t2 - self.static_t1 < 4:
                 self.angle_msg.data = 0.87
             else:
-                self.is_doing_obstacle_mission = False
+                self.is_doing_static_mission = False
                 self.angle_msg.data = 0.27
                 self.current_lane = "LEFT"
                 self.is_safe = True
                 
+        if Evaluator.evaluate() == True or self.is_doing_dynamic_mission:
+            self.is_doing_static_mission = False
+            self.is_doing_dynamic_mission = True
+            self.dynamicObstacle()
+            return
+        
         self.webot_speed_pub.publish(self.speed_msg)
         self.webot_angle_pub.publish(self.angle_msg)
+
+    def dynamicObstacle(self):
+        t2 = rospy.get_time()
+        if self.dynamic_flag == False:
+            self.dynamic_t1 = rospy.get_time()
+            self.dynamic_flag = True
+
+        
+        self.speed_msg.data = 0
+        self.publish()
 
 
     def defaultDrive(self):
@@ -323,15 +328,17 @@ class MainLoop:
         # 2. rubbercone mission
         elif self.is_rubbercone_mission == True:
             if Evaluator.evaluate == True:
-                self.obstacleDrive()
+                self.dynamicObstacle()
             else:
                 self.rubberconeDrive()
                 self.publish()
         
         # 3. obstacle mission
         elif self.is_safe == False:
-            
-            self.obstacleDrive()
+            if Evaluator.evaluate == True:
+                self.dynamicObstacle()
+            else:
+                self.obstacleDrive()
 
         # 4. defalut driving
         else:
