@@ -34,7 +34,7 @@ class MainLoop:
         self.speed_msg = Float64() # speed msg create
         self.angle_msg = Float64() # angle msg create
         self.angle_ema = Float64()
-        self.angle_ema.data = 0.5
+        self.angle_ema.data = 0.57
 
         self.initDriveFlag = True
 
@@ -68,14 +68,16 @@ class MainLoop:
         self.is_doing_dynamic_mission = False
         self.dynamic_t1 = 0.0           # 동적 미션 시작 시간
         self.dynamic_flag = False       # 동적 미션 시간을 구하기 위한 lock
+        self.isDynamicMission = False
 
-        self.originalImg = None
+        self.obstacle_img = []
+        self.originalImg = []
 
         # publisher : mainAlgorithm에서 계산한 속력과 조향각을 전달함
         rospy.Timer(rospy.Duration(1.0/30.0), self.timerCallback)
         self.webot_speed_pub = rospy.Publisher("/commands/motor/speed", Float64, queue_size=1) # motor speed
         self.webot_angle_pub = rospy.Publisher("/commands/servo/position", Float64, queue_size=1) # servo angle
-        self.webot_lane_pub = rospy.Publisher("/currentLane", Int32, queue_size=1) # 1 = left, 2 = right
+        self.webot_lane_pub = rospy.Publisher("/currentLane", Float64, queue_size=1) # 1 = left, 2 = right
 
         # subscriber : child_sign id, rubber_cone 조향각, 물체 감지 상태를 받아 속력과 조향각을 구함
         rospy.Subscriber("usb_cam/image_rect_color", Image, self.laneCallback)
@@ -88,11 +90,11 @@ class MainLoop:
     def timerCallback(self, _event):
         try:
             self.mainAlgorithm()
+            pass
         except:
             pass
     
     def laneCallback(self, _data):
-
         # detect lane
         if self.initialized == False:
             cv2.namedWindow("Simulator_Image", cv2.WINDOW_NORMAL) 
@@ -105,14 +107,15 @@ class MainLoop:
             self.initialized = True
         
         cv2_image = self.bridge.imgmsg_to_cv2(_data)
-
         self.originalImg = cv2_image.copy()
+        
+        if self.evalutator.evaluate(self.originalImg) == True:
+            self.isDynamicMission = True
+        else:
+            self.isDynamicMission = False
+        
 
-        self.obstacle_img = cv2_image
-
-        self.evalutator.evaluate(cv2_image)
-
-        #cv2.imshow("original", cv2_image) 
+        cv2.imshow("original", cv2_image) 
 
         low_H = cv2.getTrackbarPos('low_H', 'Simulator_Image')
         low_L = cv2.getTrackbarPos('low_L', 'Simulator_Image')
@@ -128,7 +131,7 @@ class MainLoop:
 
         lane_image = cv2.inRange(cv2_image, lower_lane, upper_lane)
 
-        cv2.imshow("Lane Image", lane_image)
+        # cv2.imshow("Lane Image", lane_image)
         self.laneDetection(lane_image)
 
         cv2.waitKey(1)
@@ -171,8 +174,6 @@ class MainLoop:
         elif _data.data == "safe":
             if self.is_doing_static_mission:
                 self.is_safe = False
-            elif self.is_doing_dynamic_mission:
-                self.is_safe = False
             else:
                 self.is_safe = True
         # lidar_warning 상태가 WARNING일 때(rubber cone이 아닌 장애물이 한 개 이상 감지됨)
@@ -187,8 +188,6 @@ class MainLoop:
         # rubber cone이 감지된 경우
         if self.rubbercone_angle_error < 10.0 :
             self.is_rubbercone_mission = True
-            self.static_cnt = 0
-            self.dynamic_obs_cnt = 0
         # 감지된 rubber cone이 없는 경우(subscribe 1000.0)
         else :
             self.is_rubbercone_mission = False
@@ -249,6 +248,7 @@ class MainLoop:
         self.current_lane = "LEFT"
     
     def obstacleDrive(self):
+        rospy.loginfo("MISSION: STATIC")
         t2 = rospy.get_time()
         # 장애물 미션 시작 시간
         if self.static_flag == False:
@@ -278,24 +278,17 @@ class MainLoop:
                 self.angle_msg.data = 0.27
                 self.current_lane = "LEFT"
                 self.is_safe = True
-                
-        if Evaluator.evaluate() == True or self.is_doing_dynamic_mission:
-            self.is_doing_static_mission = False
-            self.is_doing_dynamic_mission = True
-            self.dynamicObstacle()
-            return
         
         self.webot_speed_pub.publish(self.speed_msg)
         self.webot_angle_pub.publish(self.angle_msg)
 
     def dynamicObstacle(self):
-        t2 = rospy.get_time()
-        if self.dynamic_flag == False:
-            self.dynamic_t1 = rospy.get_time()
-            self.dynamic_flag = True
-
-        
+        rospy.loginfo("MISSION: Dynamic")
+        self.static_flag = False
+        self.is_doing_static_mission = False
         self.speed_msg.data = 0
+        self.angle_msg.data = 0.57            
+        
         self.publish()
 
 
@@ -310,37 +303,36 @@ class MainLoop:
 
 
     def mainAlgorithm(self):
+        rospy.loginfo("ENTRY")
         if self.current_lane == "LEFT":
             self.lane_msg.data = 1
         elif self.current_lane == "RIGHT":
             self.lane_msg.data = 2
         self.webot_lane_pub.publish(self.lane_msg) # publish current lane to slide window
-
+        rospy.loginfo("MAIN")
         # 0. init drive 
         if self.initDriveFlag == True:
             self.initDrive()
+        
+        # 1. dynamic obstacle
+        elif self.isDynamicMission == True:
+            self.dynamicObstacle()
 
-        # 1. child protect driving
+        # 2. child protect driving
         elif self.is_child_detected == True:
             self.childProtectDrive()
             self.publish()
 
-        # 2. rubbercone mission
+        # 3. rubbercone mission
         elif self.is_rubbercone_mission == True:
-            if Evaluator.evaluate == True:
-                self.dynamicObstacle()
-            else:
-                self.rubberconeDrive()
-                self.publish()
+            self.rubberconeDrive()
+            self.publish()
         
-        # 3. obstacle mission
+        # 4. obstacle mission
         elif self.is_safe == False:
-            if Evaluator.evaluate == True:
-                self.dynamicObstacle()
-            else:
-                self.obstacleDrive()
+            self.obstacleDrive()
 
-        # 4. defalut driving
+        # 5. defalut driving
         else:
             self.defaultDrive()
             self.publish()
