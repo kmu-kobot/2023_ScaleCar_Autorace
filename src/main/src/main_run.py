@@ -98,12 +98,12 @@ class MainLoop:
         # detect lane
         if self.initialized == False:
             cv2.namedWindow("Simulator_Image", cv2.WINDOW_NORMAL) 
-            cv2.createTrackbar('low_H', 'Simulator_Image', 213, 360, nothing)
-            cv2.createTrackbar('low_L', 'Simulator_Image', 110, 255, nothing)
-            cv2.createTrackbar('low_S', 'Simulator_Image', 10, 255, nothing)
-            cv2.createTrackbar('high_H', 'Simulator_Image', 300, 360, nothing)
+            cv2.createTrackbar('low_H', 'Simulator_Image', 128, 360, nothing)
+            cv2.createTrackbar('low_L', 'Simulator_Image', 134, 255, nothing)
+            cv2.createTrackbar('low_S', 'Simulator_Image', 87, 255, nothing)
+            cv2.createTrackbar('high_H', 'Simulator_Image', 334, 360, nothing)
             cv2.createTrackbar('high_L', 'Simulator_Image', 255, 255, nothing)
-            cv2.createTrackbar('high_S', 'Simulator_Image', 255, 255, nothing)
+            cv2.createTrackbar('high_S', 'Simulator_Image', 251, 255, nothing)
             self.initialized = True
         
         cv2_image = self.bridge.imgmsg_to_cv2(_data)
@@ -131,7 +131,7 @@ class MainLoop:
 
         lane_image = cv2.inRange(cv2_image, lower_lane, upper_lane)
 
-        # cv2.imshow("Lane Image", lane_image)
+        cv2.imshow("Lane Image", lane_image)
         self.laneDetection(lane_image)
 
         cv2.waitKey(1)
@@ -158,7 +158,7 @@ class MainLoop:
         elif _data.data == 0 and self.is_child_detecting == True:
             self.none_child_cnt += 1
             self.is_child_detected = True
-            if self.none_child_cnt >= 10:
+            if self.none_child_cnt >= 2: # 60cm 기준
                 self.is_child_detecting = False
                 self.none_child_cnt = 0
         else :
@@ -188,6 +188,7 @@ class MainLoop:
         # rubber cone이 감지된 경우
         if self.rubbercone_angle_error < 10.0 :
             self.is_rubbercone_mission = True
+            self.is_safe = True
         # 감지된 rubber cone이 없는 경우(subscribe 1000.0)
         else :
             self.is_rubbercone_mission = False
@@ -239,9 +240,14 @@ class MainLoop:
                     self.stop_flag = False
                     self.slow_flag = False
                     self.is_child_detected = False
+                    
+        self.angle_ema.data = 0.8 * self.angle_ema.data + 0.2 * self.angle_msg.data
+        self.webot_speed_pub.publish(self.angle_ema)
+        self.webot_speed_pub.publish(self.speed_msg)
     
     def rubberconeDrive(self):
         rospy.loginfo("MISSION: Rubber Cone")
+        self.is_safe = True
         self.speed_msg.data = 1500
         self.angle_msg.data = (self.rubbercone_angle_error  + 0.5  ) * 1.2      
         rospy.loginfo(f"rubber error: {self.rubbercone_angle_error}")
@@ -258,26 +264,27 @@ class MainLoop:
         
         if self.current_lane == "LEFT":
             self.speed_msg.data = 1000
-            if t2 - self.static_t1 < 2.3:
+            if t2 - self.static_t1 < 1.8:
                 self.angle_msg.data = 0.87
-            elif t2 - self.static_t1 < 4:
+            elif t2 - self.static_t1 < 2.6:
                 self.angle_msg.data = 0.27
             else:
-                self.is_doing_static_mission = False
                 self.angle_msg.data = 0.57
                 self.current_lane = "RIGHT"
-                self.is_safe = True
+                self.is_doing_static_mission = False
+                self.static_flag = False
+
         elif self.current_lane == "RIGHT":
             self.speed_msg.data = 1000
-            if t2 - self.static_t1 < 2.3:
+            if t2 - self.static_t1 < 1.8:
                 self.angle_msg.data = 0.27
-            elif t2 - self.static_t1 < 4:
+            elif t2 - self.static_t1 < 2.6:
                 self.angle_msg.data = 0.87
             else:
-                self.is_doing_static_mission = False
                 self.angle_msg.data = 0.57
                 self.current_lane = "LEFT"
-                self.is_safe = True
+                self.is_doing_static_mission = False
+                self.static_flag = False
         
         self.webot_speed_pub.publish(self.speed_msg)
         self.webot_angle_pub.publish(self.angle_msg)
@@ -315,13 +322,12 @@ class MainLoop:
             self.initDrive()
         
         # 1. dynamic obstacle
-        elif self.isDynamicMission == True:
+        elif self.is_safe == False and self.isDynamicMission == True:
             self.dynamicObstacle()
 
         # 2. child protect driving
         elif self.is_child_detected == True:
             self.childProtectDrive()
-            self.publish()
 
         # 3. rubbercone mission
         elif self.is_rubbercone_mission == True:
@@ -339,7 +345,7 @@ class MainLoop:
 
     def publish(self):
         rospy.loginfo("publish")
-        self.angle_ema.data = 0.2 * self.angle_ema.data + 0.8 * self.angle_msg.data
+        self.angle_ema.data = 0.3 * self.angle_ema.data + 0.7 * self.angle_msg.data
 
         self.webot_speed_pub.publish(self.speed_msg) # publish speed
         self.webot_angle_pub.publish(self.angle_ema) # publish angle
