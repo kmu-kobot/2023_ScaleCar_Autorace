@@ -4,22 +4,33 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import *
 from matplotlib.pyplot import *
 
+import rospy
+from std_msgs.msg import Int32, String, Float32, Float64
+from sensor_msgs.msg import Image
+
 TOTAL_CNT = 50
 
 class SlideWindow:
 
     def __init__(self):
-        self.current_line = "DEFAULT"
+        self.current_line = "LEFT"
         self.left_fit = None
         self.right_fit = None
         self.leftx = None
         self.rightx = None
         self.left_cnt = 25
         self.right_cnt = 25
+        self.current_lane = 1
+    
+    def voidCallback(self, _data):
+        self.current_lane = _data.data
+        # rospy.loginfo(f"{self.current_lane}")
 
 
     # 이미지를 입력으로 받아 차선 감지를 수행하는 메서드
     def slidewindow(self, img):
+        rospy.Subscriber("currentLane", Int32, self.voidCallback)
+
         # 차선 중심 위치
         x_location = 280
 
@@ -75,15 +86,19 @@ class SlideWindow:
         good_center_inds = None
         p_cut = None
 
+
+
         # 왼쪽 차선이 더 잘 인식될 때
-        if len(good_left_inds) > len(good_right_inds):
+        if self.current_lane == 1:
+            # rospy.loginfo("1")
             self.current_line = "LEFT"
             line_flag = 1
             x_current = np.int(np.mean(nonzerox[good_left_inds]))
             y_current = np.int(np.mean(nonzeroy[good_left_inds]))
             max_y = y_current
         # 오른쪽 차선이 더 잘 인식될 때
-        elif len(good_right_inds) > len(good_left_inds):
+        elif self.current_lane == 2:
+            # rospy.loginfo("2")
             if (self.left_cnt + self.right_cnt <= TOTAL_CNT) :
                 self.right_cnt += 1
                 self.left_cnt -=1
@@ -92,9 +107,10 @@ class SlideWindow:
             x_current = nonzerox[good_right_inds[np.argmax(nonzeroy[good_right_inds])]]
             y_current = np.int(np.max(nonzeroy[good_right_inds]))
         else:
+            # rospy.loginfo("3")
             self.current_line = "MID"
             line_flag = 3
-        line_flag = 1
+
         # 양쪽 차선 감지가 비슷한 경우 (가운데 차선)
         if line_flag != 3:
             # 유효한 인덱스에 점 표시
